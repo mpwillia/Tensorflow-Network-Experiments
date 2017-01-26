@@ -38,6 +38,7 @@ class Network(object):
 
             layer_msg = "Layer {:d} ({}) Shape".format(layer_num, layer_type)
             print("  {:35s} : {}".format(layer_msg, prev_layer_output.get_shape()))
+        print("")
 
         self.net_output = prev_layer_output
         self.exp_output = tf.placeholder(tf.float32, self.net_output.get_shape(),

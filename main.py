@@ -2,8 +2,8 @@
 import tensorflow as tf
 import tensorflow.contrib as tfc
 import tensorflow.contrib.layers as tfcl
-from network import Network 
-import layers
+from neural_network import Network 
+from neural_network import layers
 
 def main():
     print("Loading")

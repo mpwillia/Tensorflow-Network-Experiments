@@ -45,7 +45,7 @@ def convolution2d(**kwargs):
                               #'biases_initializer':tf.constant(0.1),
                               'stride' : 1,
                               'rate' : 1,
-                              'padding' : 'same',
+                              'padding' : 'SAME',
                               'reuse' : True
                               }
 
@@ -56,7 +56,7 @@ def convolution2d(**kwargs):
 def max_pool2d(**kwargs):
     max_pool2d.defaults = {'kernel_size' : (2,2),
                            'stride' : (2,2),
-                           'padding' : 'same',
+                           'padding' : 'SAME',
                             }
 
     kwargs = _handle_kwargs(kwargs, max_pool2d.defaults)
