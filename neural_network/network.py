@@ -1,6 +1,7 @@
 
 import tensorflow as tf
 import tensorflow.contrib as tfc
+import tensorflow.contrib.layers as tfcl
 
 import numpy as np
 
@@ -57,8 +58,10 @@ class Network(object):
             evaluation_freq = None, evaluation_func = None, evaluation_fmt = None,
             validation_data = None, 
             test_data = None,
-            gpu_mem_fraction = 0.6,
-            shuffle_freq = None):
+            gpu_mem_fraction = None,
+            shuffle_freq = None,
+            l1_reg_strength = 0.0,
+            l2_reg_strength = 0.0):
 
         """
         For |optimizer| see:
@@ -81,6 +84,22 @@ class Network(object):
 
         # setting up our loss tensor
         loss_tensor = loss(self.net_output, self.exp_output)
+
+        # setup regularization
+        if l1_reg_strength > 0.0 or l2_reg_strength > 0.0:
+            l1_reg = None
+            if l1_reg_strength > 0.0:
+                l1_reg = tfcl.l1_regularizer(l1_reg_strength)
+            
+            l2_reg = None
+            if l2_reg_strength > 0.0:
+                l2_reg = tfcl.l2_regularizer(l2_reg_strength)
+
+            l1_l2_reg = tfcl.sum_regularizer((l1_reg, l2_reg))
+            reg_penalty = tfcl.apply_regularization(l1_l2_reg, self._get_weight_variables())
+            loss_tensor += reg_penalty
+
+        # setup train steps
         self.global_step = tf.Variable(0, trainable = False, name = "net_global_step")
         self.train_step = optimizer.minimize(loss_tensor, global_step = self.global_step,
                                              aggregation_method=agg_method)
@@ -122,7 +141,6 @@ class Network(object):
                 print("")
             
             if shuffle_freq is not None and epoch % shuffle_freq == 0:
-                #print("\nShuffling Training Data")
                 train_data = self._shuffle_dataset(train_data)
 
         
@@ -138,7 +156,10 @@ class Network(object):
         if test_data is not None:
             test_eval = self._evaluate(test_data, eval_tensor)
             print("  Testing    : {:{}}".format(test_eval, evaluation_fmt))
-
+    
+    def _get_weight_variables(self):    
+        vars = tf.trainable_variables()
+        return [v for v in vars if 'weight' in v.name]
 
     def _reshape_dataset(self, dataset):
         if dataset is None: return None
