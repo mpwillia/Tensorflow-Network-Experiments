@@ -10,7 +10,7 @@ import math
 import random
 
 class Network(object):
-    def __init__(self, input_shape, layers):
+    def __init__(self, input_shape, layers, logdir = None):
         """
         For |layers| see:
             https://www.tensorflow.org/api_docs/python/contrib.layers/higher_level_ops_for_building_neural_network_layers_
@@ -26,6 +26,7 @@ class Network(object):
         
         self.net_input = tf.placeholder(tf.float32, shape = self.net_input_shape,
                                         name = "network_input_tensor")
+        
 
         print("Constructing {} Layer Network".format(len(layers)))
         print("  {:35s} : {}".format("Input Shape", self.net_input.get_shape()))
@@ -35,13 +36,26 @@ class Network(object):
         for layer_num, layer in enumerate(layers):
             layer_type = layer.func.__name__
             layer_name = "layer_{:d}_{}".format(layer_num, layer_type)
-            prev_layer_output = layer(inputs = prev_layer_output, scope = layer_name)
+            with tf.name_scope(layer_name):
+                prev_layer_output = layer(inputs = prev_layer_output, scope = layer_name)
+                #tf.summary.tensor_summary(layer_name, prev_layer_output)
+
+                if not any([check in layer_name for check in ('pool', 'flatten')]):
+                    tf.summary.scalar('sparsity', tf.nn.zero_fraction(prev_layer_output))
+                    tf.summary.histogram('activations', prev_layer_output)
+                #tf.scalar_summary(layer_name + '/sparsity', tf.nn.zero_fraction(prev_layer_output))
 
             layer_msg = "Layer {:d} ({}) Shape".format(layer_num, layer_type)
             print("  {:35s} : {}".format(layer_msg, prev_layer_output.get_shape()))
         print("")
+        
+        with tf.name_scope('network'):
+            self.net_output = prev_layer_output
+            tf.summary.scalar('sparsity', tf.nn.zero_fraction(self.net_output))
+            tf.summary.histogram('activations', self.net_output)
 
-        self.net_output = prev_layer_output
+        #tf.summary.tensor_summary(layer_name, "network_output")
+
         self.exp_output = tf.placeholder(tf.float32, self.net_output.get_shape(),
                                          name = "loss_expected_output")
         
@@ -49,6 +63,12 @@ class Network(object):
                                               name = "eval_net_output")
 
         self.sess = None
+        self.merged_summaries = None
+
+        if logdir is not None:
+            self.train_writer = tf.summary.FileWriter(logdir+"/train")
+        else:
+            self.train_writer = None
 
         self.train_step = None
         self.global_step = None
@@ -83,21 +103,30 @@ class Network(object):
         #agg_method = tf.AggregationMethod.EXPERIMENTAL_TREE
 
         # setting up our loss tensor
-        loss_tensor = loss(self.net_output, self.exp_output)
 
-        # setup regularization
-        if l1_reg_strength > 0.0 or l2_reg_strength > 0.0:
-            l1_reg = None
-            if l1_reg_strength > 0.0:
-                l1_reg = tfcl.l1_regularizer(l1_reg_strength)
+        tf.summary.image('input', self.net_input, mb_size)
+
+        with tf.name_scope("loss"):
+            loss_tensor = loss(self.net_output, self.exp_output)
+
+            # setup regularization
+            if l1_reg_strength > 0.0 or l2_reg_strength > 0.0:
+                l1_reg = None
+                if l1_reg_strength > 0.0:
+                    l1_reg = tfcl.l1_regularizer(l1_reg_strength)
+                
+                l2_reg = None
+                if l2_reg_strength > 0.0:
+                    l2_reg = tfcl.l2_regularizer(l2_reg_strength)
+
+                l1_l2_reg = tfcl.sum_regularizer((l1_reg, l2_reg))
+                reg_penalty = tfcl.apply_regularization(l1_l2_reg, self._get_weight_variables())
+                tf.summary.scalar("reg_penalty", reg_penalty)
+
+                loss_tensor += reg_penalty
             
-            l2_reg = None
-            if l2_reg_strength > 0.0:
-                l2_reg = tfcl.l2_regularizer(l2_reg_strength)
+            tf.summary.scalar("loss", loss_tensor)
 
-            l1_l2_reg = tfcl.sum_regularizer((l1_reg, l2_reg))
-            reg_penalty = tfcl.apply_regularization(l1_l2_reg, self._get_weight_variables())
-            loss_tensor += reg_penalty
 
         # setup train steps
         self.global_step = tf.Variable(0, trainable = False, name = "net_global_step")
@@ -109,6 +138,11 @@ class Network(object):
         else:
             eval_tensor = loss(self.eval_net_output, self.exp_output)
         
+        #tf.summary.scalar("evaluation", eval_tensor)
+        
+        for var in tf.trainable_variables():
+            tf.summary.histogram(var.op.name, var)
+
         if evaluation_fmt is None: evaluation_fmt = ".5f"
 
         # initilize our session and our graph variables
@@ -123,6 +157,12 @@ class Network(object):
             self.sess = tf.Session(config = sess_config)
             self.sess.run(tf.global_variables_initializer())
         
+        self.merged_summaries = tf.summary.merge_all()
+        if self.train_writer is not None: 
+            self.train_writer.add_graph(self.sess.graph)
+        
+        #net_summary = tf.summary.tensor(self.net_output) 
+
         for epoch in range(epochs):
             
             epoch_msg = "Training Epoch {:4d} / {:4d}".format(epoch, epochs)
@@ -189,7 +229,12 @@ class Network(object):
 
                 feed_dict_kwargs[self.net_input] = mb_x
                 feed_dict_kwargs[self.exp_output] = mb_y
-                self.train_step.run(feed_dict=feed_dict_kwargs)
+
+                summary, step, _ = self.sess.run([self.merged_summaries, self.global_step, self.train_step], feed_dict = feed_dict_kwargs)
+                ##summary, step = self.train_step.run([self.merged_summaries, self.global_step], feed_dict=feed_dict_kwargs)
+                
+                if self.train_writer is not None:
+                    self.train_writer.add_summary(summary, step)
             
     
     def _evaluate(self, dataset, eval_tensor, chunk_size = 2000):
@@ -199,10 +244,10 @@ class Network(object):
             results = [] 
             for chunk_x, chunk_y, in batch_dataset(dataset, chunk_size):
                 results.extend(self.net_output.eval(feed_dict={self.net_input : chunk_x}))
-                
+            
             return eval_tensor.eval(feed_dict={self.eval_net_output : results,
                                                self.exp_output : eval_y})
-
+            
 
 def match_tensor_shape(data, tensor):
     tensor_shape = tf_to_np_shape(tensor.get_shape().as_list())
