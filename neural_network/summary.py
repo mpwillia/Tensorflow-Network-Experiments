@@ -84,7 +84,8 @@ class NetworkSummary(object):
         self.variable_summary = tf.summary.merge(var_summaries)
     
     def add_graph(self, graph):
-        self.writer.add_graph(graph)
+        if self.writer is not None:
+            self.writer.add_graph(graph)
     
     # Getting Summary Tensors -------------------------------------------------
     

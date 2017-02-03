@@ -7,8 +7,8 @@ from neural_network.loss import softmax_cross_entropy_with_logits
 from neural_network.evaluation import accuracy
 
 
-LOG_DIR="/media/mike/Main Storage/tensorflow-logs/mnist_test_logdir"
-#LOG_DIR=None
+#LOG_DIR="/media/mike/Main Storage/tensorflow-logs/mnist_test_logdir"
+LOG_DIR=None
 
 def run_mnist_test():
     mnist = load_mnist()
@@ -29,7 +29,8 @@ def run_mnist_test():
                    layers.flatten(),
                    layers.fully_connected(num_outputs=1000, activation_fn=tf.nn.relu),
                    layers.fully_connected(num_outputs=10, activation_fn=None)],
-                  logdir = LOG_DIR)
+                  logdir = LOG_DIR,
+                  network_name = 'mnist_network')
     
     # Setup our training parameters
     opt = tf.train.AdamOptimizer(0.001)
@@ -41,7 +42,8 @@ def run_mnist_test():
     mb_size = 128
     eval_freq = 1
     sums_per_epoch = 10
-    checkpoint_freq = 5
+    checkpoint_freq = None
+    save_checkpoints = False
     
     # Fit the network to our data
     net.fit(train_data, opt, loss_func, epochs, mb_size, 
@@ -52,6 +54,7 @@ def run_mnist_test():
             shuffle_freq = 1,
             l2_reg_strength = 0.0001,
             summaries_per_epoch = sums_per_epoch,
+            save_checkpoints = save_checkpoints,
             checkpoint_freq = checkpoint_freq)
 
 def load_mnist():

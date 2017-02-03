@@ -82,7 +82,7 @@ class Network(object):
             l1_reg_strength = 0.0,
             l2_reg_strength = 0.0,
             summaries_per_epoch = None,
-            checkpoint_freq = None):
+            save_checkpoints = False, checkpoint_freq = None):
 
         """
         For |optimizer| see:
@@ -192,7 +192,7 @@ class Network(object):
                 
                 print("")
             
-            if checkpoint_freq is not None and epoch % checkpoint_freq == 0:
+            if save_checkpoints and checkpoint_freq is not None and epoch % checkpoint_freq == 0:
                 print("Saving Mid-Train Checkpoint")
                 self._save_checkpoint()
 
@@ -201,8 +201,9 @@ class Network(object):
             
             self.network_summary.flush()
         
-        print("Saving Final Checkpoint")
-        self._save_checkpoint()
+        if save_checkpoints:
+            print("Saving Final Checkpoint")
+            self._save_checkpoint()
 
         # Perform final evaluations
         print("\nFinal Evaluation")
@@ -274,10 +275,7 @@ class Network(object):
                         fetches.extend([train_summary, self.global_step]) 
                 
                 run_results = self.sess.run(fetches, feed_dict = feed_dict_kwargs)
-                
-                if len(run_results) > 1:
-                    _, summary, step = run_results
-                    self.network_summary.write(summary, step)
+                self._process_run_results(run_results)
 
 
     def _evaluate(self, dataset, eval_tensor, chunk_size = 2000, name = 'eval'):
@@ -298,14 +296,17 @@ class Network(object):
                 fetches.extend([eval_summary, self.global_step])
             
             run_results = self.sess.run(fetches, feed_dict = feed_dict)
+            return self._process_run_results(run_results)
 
-            if len(run_results) > 1:
-                eval_results, summary, step = run_results
-                self.network_summary.write(summary, step)
-            else:
-                eval_results = run_results
-            
+    def _process_run_results(self, run_results):
+        if len(run_results) == 1:
+            return run_results[0]
+        elif len(run_results) == 3:
+            eval_results, summary, step = run_results
+            self.network_summary.write(summary, step)
             return eval_results
+        else:
+            raise ValueError("Don't know how to process run_results with length {:d}!".format(len(run_results)))
 
     def _save_checkpoint(self):
         if self.sess is None:
@@ -313,7 +314,7 @@ class Network(object):
         
         if self.saver is None:
             raise Exception("Cannot save checkpoint without a tf.train.Saver instance!")
-        
+                
         if self.logdir is not None:
             save_path = os.path.join(self.logdir, self.network_name) 
         else:
