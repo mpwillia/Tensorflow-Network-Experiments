@@ -2,7 +2,8 @@
 
 import numpy as np
 import math
-
+import tensorflow as tf
+import sys
 
 def match_tensor_shape(data, tensor):
     tensor_shape = tf_to_np_shape(tensor.get_shape().as_list())
@@ -55,5 +56,52 @@ def batch_dataset(dataset, batch_size, include_progress = False):
             else:
                 yield batch_x, batch_y
 
+
+
+def make_per_class_eval_tensor(eval_func, net_output, exp_output, scope = None):
+    """
+    |net_output| and |exp_output| are placeholders
+    |eval_func| should be the function used to make the eval_tensor
+    """
+    with tf.name_scope(scope, default_name = 'per_class_eval'):
+        # Figure out number of classes
+        # |exp_output| should have 2 dims, the second should be the number of classes
+        exp_output.get_shape().assert_has_rank(2)
+        num_classes = exp_output.get_shape().as_list()[1]
+        
+        print("Found {} Possible Classes".format(num_classes))
+
+        filtered = []
+        with tf.name_scope('class_filtering'):
+            for class_idx in range(num_classes):    
+                
+                with tf.name_scope('class_{}'.format(class_idx)):
+                    filter_mask = tf.equal(tf.argmax(exp_output, 1), tf.cast(class_idx, tf.int64))
+                    class_net_output = tf.boolean_mask(net_output, filter_mask)
+                    class_exp_output = tf.boolean_mask(exp_output, filter_mask)
+
+                    filtered.append((class_net_output, class_exp_output))
+            
+        return tf.stack([eval_func(pred, exp) for pred, exp in filtered], name = 'per_class_eval')
+     
+
+
+def filter_by_classes(pred, exp, num_classes):
+    filtered = []
+    for i in range(num_classes):
+        filtered.append(tuple(filter_by_class(pred, exp, i)))
+    return filtered
+
+
+def filter_by_class(pred, exp, class_idx):
+    
+    pred = np.asarray(pred) 
+    exp = np.asarray(exp)
+    filter_mask = np.equal(np.argmax(exp, 1), class_idx)
+   
+    filter_pred = pred[filter_mask] 
+    filter_exp = exp[filter_mask]
+
+    return filter_pred, filter_exp
 
 

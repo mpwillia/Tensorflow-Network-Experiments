@@ -10,7 +10,7 @@ import math
 import random
 import os
 
-from network_util import match_tensor_shape, batch_dataset, get_num_batches
+from network_util import match_tensor_shape, batch_dataset, get_num_batches, make_per_class_eval_tensor
 
 from summary import NetworkSummary
 
@@ -75,6 +75,7 @@ class Network(object):
     def fit(self, train_data, optimizer, loss,
             epochs, mb_size = None,
             evaluation_freq = None, evaluation_func = None, evaluation_fmt = None,
+            per_class_evaluation = False,
             validation_data = None, 
             test_data = None,
             gpu_mem_fraction = None,
@@ -146,15 +147,35 @@ class Network(object):
             self.train_step = optimizer.minimize(loss_tensor, global_step = self.global_step,
                                                  aggregation_method=agg_method)
         
+        if evaluation_func is None:
+            evaluation_func = loss
         with tf.name_scope('evaluation') as eval_scope:
-            if evaluation_func is not None:
-                eval_tensor = evaluation_func(self.eval_net_output, self.exp_output)
-            else:
-                eval_tensor = loss(self.eval_net_output, self.exp_output)
+            
+            # overall eval tensor
+            eval_tensor = evaluation_func(self.eval_net_output, self.exp_output)
             
             self.network_summary.add_eval_summary(eval_tensor, 'train', eval_scope)
             self.network_summary.add_eval_summary(eval_tensor, 'validation', eval_scope)
             self.network_summary.add_eval_summary(eval_tensor, 'test', eval_scope)
+
+        
+        with tf.name_scope('per_class_evaluation') as per_class_eval_scope:
+            # per class eval tensor
+            per_class_evaluation = False,
+            per_class_eval_tensor = None
+            if per_class_evaluation:
+                per_class_eval_tensor = make_per_class_eval_tensor(evaluation_func,
+                                                                   self.eval_net_output,
+                                                                   self.exp_output, 
+                                                                   scope = per_class_eval_scope) 
+                def add_per_class_summary(name):
+                    self.network_summary.add_per_class_eval_summary(per_class_eval_tensor,
+                                                                    max_val = 1.0,
+                                                                    name = name,
+                                                                    scope = per_class_eval_scope)
+                add_per_class_summary('train')
+                add_per_class_summary('validation')
+                add_per_class_summary('test')
 
         if evaluation_fmt is None: evaluation_fmt = ".5f"
 
@@ -183,12 +204,14 @@ class Network(object):
             # check for mid-train evaluations
             if evaluation_freq is not None and epoch % evaluation_freq == 0: 
                 print("\nMid-Train Evaluation")
-                train_eval = self._evaluate(train_data, eval_tensor, name = 'train')
-                print("  Training   : {:{}}".format(train_eval, evaluation_fmt))
+                train_eval = self._evaluate(train_data, eval_tensor, per_class_eval_tensor,  name = 'train')
+                self._print_eval_results(train_eval, evaluation_fmt, 'Training')
+                #print("  Training   : {:{}}".format(train_eval, evaluation_fmt))
 
                 if validation_data is not None:
-                    validation_eval = self._evaluate(validation_data, eval_tensor, name = 'validation')
-                    print("  Validation : {:{}}".format(validation_eval, evaluation_fmt))
+                    validation_eval = self._evaluate(validation_data, eval_tensor, per_class_eval_tensor, name = 'validation')
+                    self._print_eval_results(validation_eval, evaluation_fmt, 'Validation')
+                    #print("  Validation : {:{}}".format(validation_eval, evaluation_fmt))
                 
                 print("")
             
@@ -207,16 +230,19 @@ class Network(object):
 
         # Perform final evaluations
         print("\nFinal Evaluation")
-        train_eval = self._evaluate(train_data, eval_tensor, name = 'train')
-        print("  Training   : {:{}}".format(train_eval, evaluation_fmt))
+        train_eval = self._evaluate(train_data, eval_tensor, per_class_eval_tensor, name = 'train')
+        self._print_eval_results(train_eval, evaluation_fmt, 'Training')
+        #print("  Training   : {:{}}".format(train_eval, evaluation_fmt))
          
         if validation_data is not None:
-            validation_eval = self._evaluate(validation_data, eval_tensor, name = 'validation')
-            print("  Validation : {:{}}".format(validation_eval, evaluation_fmt))
+            validation_eval = self._evaluate(validation_data, eval_tensor, per_class_eval_tensor, name = 'validation')
+            self._print_eval_results(validation_eval, evaluation_fmt, 'Validation')
+            #print("  Validation : {:{}}".format(validation_eval, evaluation_fmt))
 
         if test_data is not None:
-            test_eval = self._evaluate(test_data, eval_tensor, name = 'test')
-            print("  Testing    : {:{}}".format(test_eval, evaluation_fmt))
+            test_eval = self._evaluate(test_data, eval_tensor, per_class_eval_tensor, name = 'test')
+            self._print_eval_results(test_eval, evaluation_fmt, 'Testing')
+            #print("  Testing    : {:{}}".format(test_eval, evaluation_fmt))
         
         self.network_summary.flush()
 
@@ -276,9 +302,38 @@ class Network(object):
                 
                 run_results = self.sess.run(fetches, feed_dict = feed_dict_kwargs)
                 self._process_run_results(run_results)
+    
+    def _print_eval_results(self, eval_results, fmt, name):
+        #print("  Training   : {:{}}".format(train_eval, evaluation_fmt))
+            
+        try:
+            num_results = len(eval_results)
 
+            if num_results == 1:
+               eval_results = eval_results[0]
 
-    def _evaluate(self, dataset, eval_tensor, chunk_size = 2000, name = 'eval'):
+        except TypeError:
+            num_results = 1
+         
+        msg_fmt = "  {:10s} : {:{}}"
+        if num_results == 1:
+            print(msg_fmt.format(name, eval_results, fmt)) 
+        elif num_results == 2:
+            # has per class eval 
+            overall_results, per_class_results = eval_results
+
+            per_class_strs = ["{:{}}".format(result, fmt) for result in per_class_results]
+            per_class_str = "  [ {} ]".format((' , '.join(per_class_strs)))
+            
+            msg = msg_fmt.format(name, overall_results, fmt) + per_class_str
+            print(msg)
+        else:
+            raise ValueError("Don't know how to process eval_results with length {:d}!".format(num_results))
+            
+
+    def _evaluate(self, dataset, eval_tensor, per_class_eval_tensor = None, 
+                  chunk_size = 2000, name = 'eval'):
+
         eval_x, eval_y = dataset
 
         with self.sess.as_default():
@@ -291,22 +346,46 @@ class Network(object):
 
             fetches = [eval_tensor]
 
+            if per_class_eval_tensor is not None:
+                fetches.append(per_class_eval_tensor)
+
+            non_summary_size = len(fetches)
+
             eval_summary = self.network_summary.get_evaluation_summary(name)
             if eval_summary is not None:
                 fetches.extend([eval_summary, self.global_step])
             
             run_results = self.sess.run(fetches, feed_dict = feed_dict)
-            return self._process_run_results(run_results)
+            return self._process_run_results(run_results, non_summary_size)
 
-    def _process_run_results(self, run_results):
-        if len(run_results) == 1:
-            return run_results[0]
-        elif len(run_results) == 3:
-            eval_results, summary, step = run_results
+    def _evaluate_by_class(self, all_pred, all_exp, eval_tensor, num_classes):
+        results = []
+        for class_pred, class_exp in filter_by_classes(all_pred, all_exp, num_classes):
+            feed_dict = {self.eval_net_output : class_pred,
+                         self.exp_output : class_exp}
+
+            class_result = self.sess.run([eval_tensor], feed_dict = feed_dict)
+            results.extend(class_result)
+        
+        return results 
+
+    def _process_run_results(self, run_results, non_summary_size = 1):
+        if len(run_results) == non_summary_size:
+            non_summary_results = run_results[:non_summary_size]
+        elif len(run_results) == non_summary_size + 2:
+            summary, step = run_results[-2:]
+            #eval_results, summary, step = run_results
             self.network_summary.write(summary, step)
-            return eval_results
+
+            non_summary_results = run_results[:non_summary_size]
+            #return eval_results
         else:
             raise ValueError("Don't know how to process run_results with length {:d}!".format(len(run_results)))
+
+        if non_summary_size == 1:
+            return non_summary_results[0]
+        else:
+            return tuple(non_summary_results)
 
     def _save_checkpoint(self):
         if self.sess is None:

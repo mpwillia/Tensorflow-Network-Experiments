@@ -27,6 +27,7 @@ class NetworkSummary(object):
         
         # evaluation summaries
         self.eval_summaries = dict()
+        self.per_class_eval_summaries = dict()
         
         self.train_summary = None
 
@@ -77,6 +78,14 @@ class NetworkSummary(object):
         with tf.name_scope(scope, default_name = 'evaluation'):
             self.eval_summaries[name] = tf.summary.scalar(name, eval_tensor)
 
+
+    def add_per_class_eval_summary(self, per_class_eval_tensor, max_val = None, 
+                                   name = 'eval', scope = None):
+        with tf.name_scope(scope, default_name = 'evaluation'):
+            per_class_histogram_vals = make_per_class_histogram(per_class_eval_tensor, max_val = max_val)
+            self.per_class_eval_summaries[name] = tf.summary.histogram(name, per_class_histogram_vals)
+
+
     def add_variable_summary(self):
         var_summaries = [tf.summary.histogram(var.op.name, var) \
                             for var in tf.trainable_variables()]
@@ -110,9 +119,21 @@ class NetworkSummary(object):
 
     def get_evaluation_summary(self, name = 'eval'):
         if self.writer is None: return None
+
+        eval_summaries = []
         try:
-            return self.eval_summaries[name]
+            eval_summaries.append(self.eval_summaries[name])
         except KeyError:
+            pass
+
+        try:
+            eval_summaries.append(self.per_class_eval_summaries[name])
+        except KeyError:
+            pass
+        
+        if len(eval_summaries) > 0:
+            return tf.summary.merge(eval_summaries)
+        else:
             return None
 
     # Writing Summaries -------------------------------------------------------
@@ -127,6 +148,34 @@ class NetworkSummary(object):
 
 
 # Summary Utils ---------------------------------------------------------------
+
+def make_per_class_histogram(per_class_results, n_digits = 4, max_val = None, scope = None):
+    with tf.name_scope(scope, default_name = 'per_class_histogram_values'):
+        histogram_values = []
+
+        if max_val is not None:
+            base_values = approx_decimal_for_hist(max_val, -1, n_digits)
+            #print("Class -1 : {}".format(base_values.get_shape()))
+            histogram_values.append(base_values)
+
+        num_classes = per_class_results.get_shape().as_list()[0]
+        
+        for class_idx in range(num_classes):
+            class_result = per_class_results[class_idx]
+            class_values = approx_decimal_for_hist(class_result, class_idx, n_digits)
+            
+            #print("Class {:2d} : {}".format(class_idx, class_values.get_shape()))
+            histogram_values.append(class_values)
+        
+    
+    return tf.cast(tf.concat(0, histogram_values), tf.int32, name = 'per_class_eval_histogram')
+
+
+def approx_decimal_for_hist(dec_val, fill_val, n_digits = 4):
+    with tf.name_scope('hist_decimal_approx'):
+        n_vals = tf.cast(dec_val * 10**n_digits, tf.int32)
+        return tf.fill((n_vals,), fill_val) 
+
 
 def summarize_layer(layer_tensor):
     sparsity = tf.summary.scalar('sparsity', tf.nn.zero_fraction(layer_tensor))

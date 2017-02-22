@@ -77,7 +77,9 @@ _layer_funcs = [tfcl.avg_pool2d,
                 tfcl.repeat,
                 tfcl.safe_embedding_lookup_sparse,
                 tfcl.separable_convolution2d,
-                tfcl.unit_norm
+                tfcl.unit_norm,
+                tf.nn.dynamic_rnn,
+                tf.nn.rnn,
                 ]
 
 def _register_layer_func(layer_func):
