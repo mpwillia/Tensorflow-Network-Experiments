@@ -136,7 +136,8 @@ class Network(object):
         self.network_summary.add_variable_summary()
 
         # setup train steps
-        self.global_step = tf.Variable(0, trainable = False, name = "net_global_step")
+        if self.global_step is None:
+            self.global_step = tf.Variable(0, trainable = False, name = "net_global_step")
     
         try:
             opt_name = optimizer.__class__.__name__
