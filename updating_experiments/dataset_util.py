@@ -5,6 +5,13 @@ from collections import namedtuple
 Dataset = namedtuple('Dataset', ['images', 'labels'])
 Datasets = namedtuple('Datasets', ['train', 'validation', 'test'])
 
+def split_by_class(dataset):
+    classes = set((one_hot_to_label(ohl) for ohl in dataset.labels))
+    by_class = []
+    for label in sorted(list(classes)):
+        by_class.append(filter_dataset(dataset, [label])) 
+    return by_class
+
 def sample_dataset(dataset, num_samples, seed = None):
     images, labels = split_dataset(dataset)
     zipped = list(zip(images, labels))

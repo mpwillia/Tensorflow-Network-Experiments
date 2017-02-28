@@ -78,7 +78,7 @@ class Network(object):
         self.saver = None
         self.train_step = None
         self.global_step = None
-
+        
     def fit(self, train_data, optimizer, loss,
             epochs, mb_size = None,
             evaluation_freq = None, evaluation_func = None, evaluation_fmt = None,
@@ -92,7 +92,6 @@ class Network(object):
             summaries_per_epoch = None,
             save_checkpoints = False, checkpoint_freq = None,
             verbose = False):
-
         """
         For |optimizer| see:
             https://www.tensorflow.org/api_docs/python/train/optimizers

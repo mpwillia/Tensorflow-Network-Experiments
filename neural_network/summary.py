@@ -168,8 +168,10 @@ def make_per_class_histogram(per_class_results, n_digits = 4, max_val = None, sc
             histogram_values.append(class_values)
         
     
-    #return tf.cast(tf.concat(0, histogram_values), tf.int32, name = 'per_class_eval_histogram')
-    return tf.cast(tf.concat(histogram_values, 0), tf.int32, name = 'per_class_eval_histogram')
+    if tf.__version__.startswith('1.0'):
+        return tf.cast(tf.concat(histogram_values, 0), tf.int32, name = 'per_class_eval_histogram')
+    else:
+        return tf.cast(tf.concat(0, histogram_values), tf.int32, name = 'per_class_eval_histogram')
 
 
 def approx_decimal_for_hist(dec_val, fill_val, n_digits = 4):
