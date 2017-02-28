@@ -3,6 +3,8 @@ import tensorflow as tf
 import tensorflow.contrib as tfc
 import tensorflow.contrib.layers as tfcl
 
+print("Using Tensorflow Version: {}".format(tf.__version__))
+
 import numpy as np
 
 import sys
@@ -10,9 +12,14 @@ import math
 import random
 import os
 
-from network_util import match_tensor_shape, batch_dataset, get_num_batches, make_per_class_eval_tensor
+from network_util import match_tensor_shape, batch_dataset, get_num_batches, \
+    make_per_class_eval_tensor, print_eval_results, print_fit_results
 
 from summary import NetworkSummary
+
+from collections import namedtuple
+EvalResults = namedtuple('EvalResults', ['overall', 'per_class'])
+FitResults = namedtuple('FitResults', ['train', 'validation', 'test'])
 
 class Network(object):
     def __init__(self, input_shape, layers, logdir = None, network_name = 'network'):
@@ -83,7 +90,8 @@ class Network(object):
             l1_reg_strength = 0.0,
             l2_reg_strength = 0.0,
             summaries_per_epoch = None,
-            save_checkpoints = False, checkpoint_freq = None):
+            save_checkpoints = False, checkpoint_freq = None,
+            verbose = False):
 
         """
         For |optimizer| see:
@@ -195,6 +203,8 @@ class Network(object):
         
         self.network_summary.add_graph(self.sess.graph)
         
+        epoch_eval_results = []
+
         for epoch in range(epochs):
             
             epoch_msg = "Training Epoch {:4d} / {:4d}".format(epoch, epochs)
@@ -204,20 +214,25 @@ class Network(object):
             
             # check for mid-train evaluations
             if evaluation_freq is not None and epoch % evaluation_freq == 0: 
-                print("\nMid-Train Evaluation")
+                if verbose > 1: print("\nMid-Train Evaluation")
                 train_eval = self._evaluate(train_data, eval_tensor, per_class_eval_tensor,  name = 'train')
-                self._print_eval_results(train_eval, evaluation_fmt, 'Training')
+                #if verbose > 1: print_eval_results(train_eval, evaluation_fmt, 'Training')
                 #print("  Training   : {:{}}".format(train_eval, evaluation_fmt))
 
                 if validation_data is not None:
                     validation_eval = self._evaluate(validation_data, eval_tensor, per_class_eval_tensor, name = 'validation')
-                    self._print_eval_results(validation_eval, evaluation_fmt, 'Validation')
-                    #print("  Validation : {:{}}".format(validation_eval, evaluation_fmt))
+                    #if verbose > 1: print_eval_results(validation_eval, evaluation_fmt, 'Validation')
+                else:
+                    validation_eval = None
+
+                epoch_fit_results = FitResults(train = train_eval, validation = validation_eval, test = None)
+                epoch_eval_results.append(epoch_fit_results)
                 
-                print("")
+                if verbose > 1: print_fit_results(epoch_fit_results, evaluation_fmt)
+            if verbose > 1: print("")
             
             if save_checkpoints and checkpoint_freq is not None and epoch % checkpoint_freq == 0:
-                print("Saving Mid-Train Checkpoint")
+                if verbose > 1: print("Saving Mid-Train Checkpoint")
                 self._save_checkpoint()
 
             if shuffle_freq is not None and epoch % shuffle_freq == 0:
@@ -226,26 +241,34 @@ class Network(object):
             self.network_summary.flush()
         
         if save_checkpoints:
-            print("Saving Final Checkpoint")
+            if verbose > 1: print("Saving Final Checkpoint")
             self._save_checkpoint()
+      
+        if verbose == 1: print("")
 
         # Perform final evaluations
-        print("\nFinal Evaluation")
+        if verbose > 1: print("Final Evaluation")
         train_eval = self._evaluate(train_data, eval_tensor, per_class_eval_tensor, name = 'train')
-        self._print_eval_results(train_eval, evaluation_fmt, 'Training')
-        #print("  Training   : {:{}}".format(train_eval, evaluation_fmt))
+        #if verbose > 1: print_eval_results(train_eval, evaluation_fmt, 'Training')
          
         if validation_data is not None:
             validation_eval = self._evaluate(validation_data, eval_tensor, per_class_eval_tensor, name = 'validation')
-            self._print_eval_results(validation_eval, evaluation_fmt, 'Validation')
-            #print("  Validation : {:{}}".format(validation_eval, evaluation_fmt))
+            #if verbose > 1: print_eval_results(validation_eval, evaluation_fmt, 'Validation')
+        else:
+            validation_eval = None
 
         if test_data is not None:
             test_eval = self._evaluate(test_data, eval_tensor, per_class_eval_tensor, name = 'test')
-            self._print_eval_results(test_eval, evaluation_fmt, 'Testing')
-            #print("  Testing    : {:{}}".format(test_eval, evaluation_fmt))
+            #if verbose > 1: print_eval_results(test_eval, evaluation_fmt, 'Testing')
+        else:
+            test_eval = None
         
+        fit_results = FitResults(train = train_eval, validation = validation_eval, test = test_eval)
+        
+        if verbose > 1: print_fit_results(fit_results, evaluation_fmt)
+
         self.network_summary.flush()
+        return fit_results
 
     def _get_weight_variables(self):    
         vars = tf.trainable_variables()
@@ -303,34 +326,6 @@ class Network(object):
                 
                 run_results = self.sess.run(fetches, feed_dict = feed_dict_kwargs)
                 self._process_run_results(run_results)
-    
-    def _print_eval_results(self, eval_results, fmt, name):
-        #print("  Training   : {:{}}".format(train_eval, evaluation_fmt))
-            
-        try:
-            num_results = len(eval_results)
-
-            if num_results == 1:
-               eval_results = eval_results[0]
-
-        except TypeError:
-            num_results = 1
-         
-        msg_fmt = "  {:10s} : {:{}}"
-        if num_results == 1:
-            print(msg_fmt.format(name, eval_results, fmt)) 
-        elif num_results == 2:
-            # has per class eval 
-            overall_results, per_class_results = eval_results
-
-            per_class_strs = ["{:{}}".format(result, fmt) for result in per_class_results]
-            per_class_str = "  [ {} ]".format((' , '.join(per_class_strs)))
-            
-            msg = msg_fmt.format(name, overall_results, fmt) + per_class_str
-            print(msg)
-        else:
-            raise ValueError("Don't know how to process eval_results with length {:d}!".format(num_results))
-            
 
     def _evaluate(self, dataset, eval_tensor, per_class_eval_tensor = None, 
                   chunk_size = 2000, name = 'eval'):
@@ -356,8 +351,8 @@ class Network(object):
             if eval_summary is not None:
                 fetches.extend([eval_summary, self.global_step])
             
-            run_results = self.sess.run(fetches, feed_dict = feed_dict)
-            return self._process_run_results(run_results, non_summary_size)
+            eval_results = self.sess.run(fetches, feed_dict = feed_dict)
+            return self._process_eval_results(eval_results, non_summary_size)
 
     def _evaluate_by_class(self, all_pred, all_exp, eval_tensor, num_classes):
         results = []
@@ -370,23 +365,47 @@ class Network(object):
         
         return results 
 
+    def _print_eval_results(self, eval_results, fmt, name):
+        msg_fmt = "  {:10s} : {:{}}"
+        msg = msg_fmt.format(name, eval_results.overall, fmt)
+        
+        if eval_results.per_class is not None:
+            per_class_strs = ["{:{}}".format(result, fmt) for result in eval_results.per_class]
+            per_class_str = "  [ {} ]".format((' , '.join(per_class_strs)))
+            msg += per_class_str 
+        
+        print(msg)
+
+    def _process_eval_results(self, eval_results, non_summary_size = 1):
+        eval_results = self._process_run_results(eval_results, non_summary_size)
+        
+        if len(eval_results) == 1:
+            return EvalResults(overall = eval_results[0])
+        elif len(eval_results) == 2:
+            return EvalResults(overall = eval_results[0], per_class = eval_results[1])
+        else:
+            raise ValueError("Don't know how to process eval_results with length {:d}!".format(len(eval_results)))
+         
+
     def _process_run_results(self, run_results, non_summary_size = 1):
-        if len(run_results) == non_summary_size:
-            non_summary_results = run_results[:non_summary_size]
-        elif len(run_results) == non_summary_size + 2:
+        #if len(run_results) == non_summary_size:
+            #non_summary_results = run_results[:non_summary_size]
+        if len(run_results) == non_summary_size + 2:
             summary, step = run_results[-2:]
-            #eval_results, summary, step = run_results
+            #run_results, summary, step = run_results
             self.network_summary.write(summary, step)
 
-            non_summary_results = run_results[:non_summary_size]
-            #return eval_results
-        else:
+            #return run_results
+        elif len(run_results) != non_summary_size:
             raise ValueError("Don't know how to process run_results with length {:d}!".format(len(run_results)))
-
-        if non_summary_size == 1:
-            return non_summary_results[0]
-        else:
-            return tuple(non_summary_results)
+        
+        #non_summary_results = run_results[:non_summary_size]
+        return tuple(run_results[:non_summary_size])
+        #if non_summary_size == 1:
+        #    return EvalResults(overall = non_summary_results[0])
+        #    #return non_summary_results[0]
+        #else:
+        #    return tuple(non_summary_results)
 
     def _save_checkpoint(self):
         if self.sess is None:

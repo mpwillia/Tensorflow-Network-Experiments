@@ -1,6 +1,6 @@
 
 import mnist_test
-import nn_updating_test
+from updating_experiments import nn_updating_test
 
 def main():
     #mnist_test.run_mnist_test() 
