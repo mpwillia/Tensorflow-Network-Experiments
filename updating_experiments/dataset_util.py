@@ -29,14 +29,30 @@ def test():
     print("Concat Datasets Objects")
     print(dss_c)
 
+def concat(arrs, *args, **kwargs):
+    try:
+        return np.concatenate(arrs, *args, **kwargs)
+    except ValueError:
+        print("Tried to Concat")
+        for arr in arrs:
+            print("  {}".format(arr.shape))
+        raise
+
 def concat_datasets(*args):
     
     if len(args) <= 0: return None
 
     # check if they're all Dataset or Datasets
     if all((type(ds) is Dataset for ds in args)):
-        concat_imgs = np.concatenate([images for images,labels in args])
-        concat_labels = np.concatenate([labels for images,labels in args])
+        all_images = [images for images,labels in args]
+        all_labels = [labels for images,labels in args]
+
+        concat_imgs = concat(all_images)
+        concat_labels = concat(all_labels)
+        
+        #concat_imgs = np.concatenate(all_images)
+        #concat_labels = np.concatenate(all_labels)
+
         return Dataset(concat_imgs, concat_labels)
     elif all((type(ds) is Datasets for ds in args)):
         # they're all Datasets
@@ -62,9 +78,6 @@ def sample_dataset(dataset, num_samples, seed = None):
     zipped = list(zip(images, labels))
     samples = random.sample(zipped, num_samples)
     sample_images, sample_labels = tuple(zip(*samples))
-    
-    print("Sample Size: {:d}".format(len(sample_labels)))
-
     return Dataset(np.asarray(sample_images), np.asarray(sample_labels)) 
 
 def filter_datasets(datasets, labels = None):
