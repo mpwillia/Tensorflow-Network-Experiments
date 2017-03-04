@@ -61,7 +61,7 @@ def fit_net(net, epochs, train_data, val_data, test_data, **kwargs):
     return net, fit_results
 
 
-def load_mnist_network(updatable = False):
+def load_mnist_network(updatable = False, **kwargs):
     if updatable:
         cls = UpdatableNetwork 
     else:
@@ -76,7 +76,7 @@ def load_mnist_network(updatable = False):
                    layers.fully_connected(num_outputs=1000, activation_fn=tf.nn.relu),
                    layers.fully_connected(num_outputs=10, activation_fn=None)],
                   logdir = None,
-                  network_name = 'mnist_network')
+                  network_name = 'mnist_network', **kwargs)
     return net
 
 
