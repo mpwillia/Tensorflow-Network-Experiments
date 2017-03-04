@@ -1,4 +1,4 @@
 import simple
 import drip
-import holdout
+import ideal_holdout
 import naive_holdout

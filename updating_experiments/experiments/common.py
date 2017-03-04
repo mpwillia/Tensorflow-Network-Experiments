@@ -4,7 +4,7 @@ from neural_network import layers
 from neural_network.loss import softmax_cross_entropy_with_logits
 from neural_network.evaluation import accuracy
 
-from updatable_network import UpdatableNetwork 
+from ..updatable_network import UpdatableNetwork 
 
 
 def _handle_kwargs(given, default):

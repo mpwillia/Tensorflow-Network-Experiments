@@ -1,7 +1,8 @@
 
+
 from ..common import fit_net, get_mnist_fit_params
-from ..dataset_util import filter_dataset, split_dataset
-from ..dataset_util import Dataset, Datasets
+from ...dataset_util import filter_dataset, split_dataset
+from ...dataset_util import Dataset, Datasets
 
 
 def run(mnist, net):

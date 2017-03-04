@@ -6,8 +6,7 @@ from common import load_mnist, load_mnist_network
 
 from neural_network.network_util import print_fit_results 
 
-import baselines
-import tests
+from experiments import baselines, tests
 
 #from neural_network import Network 
 #from neural_network import layers
@@ -16,7 +15,14 @@ import tests
 
 
 def main():
-    mnist_data = load_mnist()
+    mnist = load_mnist()
+    
+    #baselines.simple.run(mnist)
+    #baselines.ideal_holdout.run(mnist)
+    #baselines.naive_holdout.run(mnist)
+
+    tests.recall.run(mnist, 0.1)
+
     #mnist_net = load_mnist_network(False)
     
     #run_simple_baseline(mnist_data, mnist_net)
@@ -27,7 +33,7 @@ def main():
 
     #run_holdout_test(mnist_data, 0.0)
     #run_holdout_test(mnist_data, 0.00001)
-    run_holdout_test(mnist_data, 0.01)
+    #run_holdout_test(mnist_data, 0.01)
     #run_holdout_test(mnist_data, 0.05)
     #run_holdout_test(mnist_data, 0.1)
     #run_holdout_test(mnist_data, 0.25)
