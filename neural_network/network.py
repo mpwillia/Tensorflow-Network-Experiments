@@ -203,7 +203,8 @@ class Network(object):
         self.network_summary.add_graph(self.sess.graph)
         
         epoch_eval_results = []
-
+        
+        initial_step = self.sess.run(self.global_step)
         for epoch in range(epochs):
             
             epoch_msg = "Training Epoch {:4d} / {:4d}".format(epoch, epochs)
@@ -238,7 +239,11 @@ class Network(object):
                 train_data = self._shuffle_dataset(train_data)
             
             self.network_summary.flush()
-        
+        final_step = self.sess.run(self.global_step)
+        total_steps = final_step - initial_step 
+        if verbose > 0:
+            print("\nTrained for {:d} Steps".format(total_steps))
+
         if save_checkpoints:
             if verbose > 1: print("Saving Final Checkpoint")
             self._save_checkpoint()
@@ -301,7 +306,7 @@ class Network(object):
             summary_every = int(math.ceil(mb_total / float(summaries_per_epoch)))
 
         with self.sess.as_default():
-            for mb_x, mb_y, mb_num, mb_total in batch_dataset(train_data, mb_size, True):
+            for mb_x, mb_y, mb_num, mb_total in self._batch_for_train(train_data, mb_size, True):
 
                 if verbose:
                     prefix = ''
@@ -333,7 +338,7 @@ class Network(object):
 
         with self.sess.as_default():
             results = [] 
-            for chunk_x, chunk_y, in batch_dataset(dataset, chunk_size):
+            for chunk_x, chunk_y, in self._batch_for_eval(dataset, chunk_size):
                 results.extend(self.net_output.eval(feed_dict={self.net_input : chunk_x}))
 
             feed_dict = {self.eval_net_output : results,
@@ -352,7 +357,14 @@ class Network(object):
             
             eval_results = self.sess.run(fetches, feed_dict = feed_dict)
             return self._process_eval_results(eval_results, non_summary_size)
-
+    
+    # split these just for the sake of subclassing
+    def _batch_for_train(self, dataset, batch_size, include_progress = False):
+        return batch_dataset(dataset, batch_size, include_progress)
+    
+    def _batch_for_eval(self, dataset, batch_size, include_progress = False):
+        return batch_dataset(dataset, batch_size, include_progress)
+    
     def _evaluate_by_class(self, all_pred, all_exp, eval_tensor, num_classes):
         results = []
         for class_pred, class_exp in filter_by_classes(all_pred, all_exp, num_classes):
