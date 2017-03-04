@@ -14,7 +14,7 @@ def run(dataset, net, filter_labels = None):
     test_data = split_dataset(dataset.test)
     
 
-    epochs = 5
+    epochs = 10
     verbose = True
     kwargs = get_mnist_fit_params()
     kwargs['verbose'] = verbose
