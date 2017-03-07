@@ -40,9 +40,11 @@ def run_mnist_test():
     loss_func = softmax_cross_entropy_with_logits
     eval_func = accuracy
 
-    epochs = 2
+    eval_target = 0.98
+
+    epochs = 10
     mb_size = 512
-    eval_freq = None
+    eval_freq = 1
     eval_fmt = '8.3%'
     per_class_eval = True
     sums_per_epoch = 10
@@ -54,6 +56,7 @@ def run_mnist_test():
     fit_results = net.fit(train_data, opt, loss_func, epochs, mb_size, 
             evaluation_freq = eval_freq, evaluation_func = eval_func,
             evaluation_fmt = eval_fmt, per_class_evaluation = per_class_eval,
+            evaluation_target = eval_target,
             validation_data = val_data, 
             test_data = test_data, 
             shuffle_freq = 1,

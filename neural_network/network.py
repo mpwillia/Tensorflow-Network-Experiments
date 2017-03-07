@@ -33,6 +33,11 @@ class Network(object):
         
         self.network_name = network_name
 
+        self.sess = None
+        self.saver = None
+        self.train_step = None
+        self.global_step = None
+
         self.logdir = logdir
         self.network_summary = NetworkSummary(logdir, max_queue = 3, flush_secs = 60)
 
@@ -74,14 +79,20 @@ class Network(object):
         self.eval_net_output = tf.placeholder(tf.float32, self.net_output.get_shape(),
                                               name = "eval_net_output")
 
-        self.sess = None
-        self.saver = None
-        self.train_step = None
-        self.global_step = None
-        
+    
+    def close(self):
+        if self.sess is not None:
+            self.sess.close()
+            self.sess = None
+
+    def get_global_step(self):
+        if self.sess is not None:
+            return self.sess.run(self.global_step)
+
     def fit(self, train_data, optimizer, loss,
             epochs, mb_size = None,
             evaluation_freq = None, evaluation_func = None, evaluation_fmt = None,
+            evaluation_target = None, max_step = None,
             per_class_evaluation = False,
             validation_data = None, 
             test_data = None,
@@ -101,7 +112,8 @@ class Network(object):
             https://www.tensorflow.org/api_docs/python/nn/classification
 
         """
-        
+    
+
         # reshape given data
         train_data = self._reshape_dataset(train_data)
         validation_data = self._reshape_dataset(validation_data)
@@ -204,7 +216,7 @@ class Network(object):
         
         epoch_eval_results = []
         
-        initial_step = self.sess.run(self.global_step)
+        initial_step = self.get_global_step()
         for epoch in range(epochs):
             
             epoch_msg = "Training Epoch {:4d} / {:4d}".format(epoch, epochs)
@@ -225,10 +237,28 @@ class Network(object):
                 else:
                     validation_eval = None
 
+                
+                if evaluation_target:
+                    if validation_eval is not None:
+                        met_target = validation_eval.overall >= evaluation_target
+                    else:
+                        met_target = train_eval.overall >= evaluation_target
+                else:
+                    met_target = None
+
                 epoch_fit_results = FitResults(train = train_eval, validation = validation_eval, test = None)
                 epoch_eval_results.append(epoch_fit_results)
                 
                 if verbose > 1: print_fit_results(epoch_fit_results, evaluation_fmt)
+
+                if met_target is not None and met_target:
+                    print("\n\nReached Evaluation Target of {}".format(evaluation_target))
+                    break
+            
+            if max_step is not None and self.get_global_step() >= max_step:
+                print("\n\nReached Max Step Target of {}".format(max_step))
+                break
+
             if verbose > 1: print("")
             
             if save_checkpoints and checkpoint_freq is not None and epoch % checkpoint_freq == 0:
@@ -239,7 +269,8 @@ class Network(object):
                 train_data = self._shuffle_dataset(train_data)
             
             self.network_summary.flush()
-        final_step = self.sess.run(self.global_step)
+        
+        final_step = self.get_global_step()
         total_steps = final_step - initial_step 
         if verbose > 0:
             print("\nTrained for {:d} Steps".format(total_steps))

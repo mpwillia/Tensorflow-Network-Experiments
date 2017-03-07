@@ -1,11 +1,11 @@
 
 from ..common import load_mnist_network, fit_net, get_mnist_fit_params
 from ...dataset_util import filter_dataset, split_dataset, sample_dataset
-from ..experiment import print_results 
+from ..experiments import print_results, ExperimentResult
 
 def run(dataset):
-    
-    print("Running Naive Holdout Baseline")
+    baseline_name = "Naive Holdout Baseline"
+    print("Running {}".format(baseline_name))
     net = load_mnist_network()
 
     holdout_labels = set([7])
@@ -31,8 +31,12 @@ def run(dataset):
     # holdout train -----------------------------------------------------------
     print("Holdout Train")
     net, final_results = fit_net(net, holdout_epochs, holdout_train, val_data, test_data, **kwargs)
-    
-    print_results(final_results, 'Naive Holdout Baseline Results')
+    total_steps = net.get_global_step()
 
-    return initial_results, final_results
+    net.close()
+    print_results(final_results, baseline_name)
+    exp_results = ExperimentResult(baseline_name, final_results, total_steps)
+
+    return exp_results
+    #return initial_results, final_results
 

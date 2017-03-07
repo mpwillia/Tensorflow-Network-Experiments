@@ -24,7 +24,7 @@ def get_mnist_fit_params():
     return {'optimizer' : opt,
             'loss' : loss_func,
             'mb_size' : 128,
-            'evaluation_freq' : None, 
+            'evaluation_freq' : None,
             'evaluation_func' : eval_func,
             'evaluation_fmt'  : '8.3%',
             'per_class_evaluation' : True,
@@ -62,10 +62,16 @@ def fit_net(net, epochs, train_data, val_data, test_data, **kwargs):
 
 
 def load_mnist_network(updatable = False, **kwargs):
+
+    if load_mnist_network.prev_net is not None:
+        return load_mnist_network.prev_net
+
     if updatable:
         cls = UpdatableNetwork 
+        name = 'updatable_mnist_network'
     else:
         cls = Network
+        name = 'mnist_network'
 
     # Setup the network
     net = cls([28,28,1], 
@@ -76,11 +82,11 @@ def load_mnist_network(updatable = False, **kwargs):
                    layers.fully_connected(num_outputs=1000, activation_fn=tf.nn.relu),
                    layers.fully_connected(num_outputs=10, activation_fn=None)],
                   logdir = None,
-                  network_name = 'mnist_network', **kwargs)
+                  network_name = name, **kwargs)
+
+    load_mnist_network.prev_net = net
     return net
 
+load_mnist_network.prev_net = None
 
-def load_mnist():
-    from tensorflow.examples.tutorials.mnist import input_data
-    return input_data.read_data_sets("MNIST_data/", one_hot=True)
 

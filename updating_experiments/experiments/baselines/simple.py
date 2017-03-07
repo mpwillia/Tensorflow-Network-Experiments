@@ -1,13 +1,12 @@
 
 from ..common import load_mnist_network, fit_net, get_mnist_fit_params
 from ...dataset_util import filter_dataset, split_dataset
-from ..experiment import print_results 
+from ..experiments import print_results, ExperimentResult
 
 
 def run(dataset, epochs = 5, filter_labels = None):
-    
-    print("Running Simple Baseline")
-    print("  Epochs : {:d}".format(epochs))
+    baseline_name = "Simple {:d} Epoch Baseline".format(epochs)
+    print("Running {}".format(baseline_name))
     print("  Filter Labels : {}".format(str(filter_labels)))
 
     net = load_mnist_network()
@@ -24,8 +23,10 @@ def run(dataset, epochs = 5, filter_labels = None):
     kwargs['verbose'] = verbose
 
     net, fit_results = fit_net(net, epochs, train_data, val_data, test_data, **kwargs)
-
-    print_results(fit_results, 'Simple Baseline')
-
-    return fit_results
+    total_steps = net.get_global_step()
+    
+    net.close()
+    print_results(fit_results, baseline_name)
+    exp_results = ExperimentResult(baseline_name, fit_results, total_steps)
+    return exp_results 
 

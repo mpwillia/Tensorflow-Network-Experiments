@@ -25,19 +25,27 @@ class UpdatableNetwork(Network):
             raise ValueError("Recall percentage cannot be greater than or equal to 1.0")
         print("Update Method: {}".format(self.update_method))
         print("Recall Percent : {:7.2%}".format(self.recall_p))
+    
+    def close(self):
+        super(UpdatableNetwork, self).close()
+        self.known_train_data = None
+
+    def set_recall_p(self, recall_p):
+        self.recall_p = recall_p  
 
     def fit(self, train_data, optimizer, loss, epochs, **kwargs):
         args = (train_data, optimizer, loss, epochs)
         fit_return = super(UpdatableNetwork, self).fit(*args, **kwargs)
-       
-        if self.update_method == 'sample_previous':
-            train_data = Dataset(*self._reshape_dataset(train_data)) 
-            print("Storing training data!")
-            if self.known_train_data is None:
-                self.known_train_data = train_data 
-            else:
-                self.known_train_data = concat_datasets(self.known_train_data, train_data)
-            print("Stored training data size: {:d}".format(len(self.known_train_data.labels)))
+        
+        if self.update_method is not None:
+            if self.update_method == 'sample_previous':
+                train_data = Dataset(*self._reshape_dataset(train_data)) 
+                print("Storing training data!")
+                if self.known_train_data is None:
+                    self.known_train_data = train_data 
+                else:
+                    self.known_train_data = concat_datasets(self.known_train_data, train_data)
+                print("Stored training data size: {:d}".format(len(self.known_train_data.labels)))
 
         return fit_return
     
