@@ -11,6 +11,7 @@ import sys
 import math
 import random
 import os
+from functools import partial 
 
 from network_util import match_tensor_shape, batch_dataset, get_num_batches, \
     make_per_class_eval_tensor, print_eval_results, print_fit_results
@@ -20,6 +21,9 @@ from summary import NetworkSummary
 from collections import namedtuple
 EvalResults = namedtuple('EvalResults', ['overall', 'per_class'])
 FitResults = namedtuple('FitResults', ['train', 'validation', 'test'])
+
+
+
 
 class Network(object):
     def __init__(self, input_shape, layers, logdir = None, network_name = 'network'):
@@ -32,11 +36,13 @@ class Network(object):
         self.layers = layers
         
         self.network_name = network_name
+        self.input_shape = input_shape
 
         self.sess = None
         self.saver = None
         self.train_step = None
-        self.global_step = None
+        #self.global_step = None
+        self.global_step = tf.Variable(0, trainable = False, name = "net_global_step")
 
         self.logdir = logdir
         self.network_summary = NetworkSummary(logdir, max_queue = 3, flush_secs = 60)
@@ -79,7 +85,95 @@ class Network(object):
         self.eval_net_output = tf.placeholder(tf.float32, self.net_output.get_shape(),
                                               name = "eval_net_output")
 
-    
+    def __getstate__(self):
+        odict = self.__dict__.copy()
+        
+        from pprint import pprint 
+
+        def unwrap_layer(wrapped_layer):
+            print("Layer to Unwrap") 
+            pprint(wrapped_layer)
+
+            return (wrapped_layer.func, wrapped_layer.args, wrapped_layer.kwargs)
+
+        print("Current Dict State")
+        pprint(odict)
+        
+        # Reset Session and Savor Object
+        #odict['sess'] = None
+        #odict['saver'] = None
+
+        # Strip Tensorflow Content
+        del odict['sess']
+        del odict['saver']
+        del odict['global_step']
+        del odict['train_step']
+        del odict['network_summary']
+        del odict['exp_output']
+        del odict['eval_net_output']
+        del odict['net_input']
+        del odict['net_output']
+        del odict['net_input_shape']
+
+
+        #print("Test")
+        #pprint(self.layers[0].__getstate__())
+
+
+        print("\n\nFinal Dict State")
+        
+        # Unwrap Layer Functions
+        #unwrapped_layers = [unwrap_layer(layer) for layer in self.layers]
+        #odict['layers'] = unwrapped_layers
+        
+        
+
+
+        pprint(odict)
+
+        return odict
+
+    def __setstate__(self, state):
+        from pprint import pprint 
+        print("Restoring State From")
+        pprint(state)
+
+        #unwrapped_layers = state['layers']
+        #wrapped_layers = [partial(func, *args, **kwargs) for func, args, kwargs in unwrapped_layers]
+        #state['layers'] = wrapped_layers
+
+        self.__init__(**state)
+
+
+
+
+    def save_variables(self, path):
+        if self.saver is None or self.sess is None:
+            raise Exception("Cannot save variables without a session and saver")
+        self.saver.save(self.sess, path)
+
+
+    def load_variables(self, path):
+        self.init_session()  
+        self.saver.restore(self.sess, path)
+
+    def init_session(self):
+        # initilize our session and our graph variables
+        if self.sess is None:
+            sess_config = tf.ConfigProto(
+                                         log_device_placement = False,
+                                         allow_soft_placement = False)
+            
+            self.saver = tf.train.Saver()
+            self.sess = tf.Session(config = sess_config)
+            self.sess.run(tf.global_variables_initializer())
+        else: 
+            list_of_variables = tf.global_variables()
+            uninitialized_variables = list(tf.get_variable(name) for name in
+                                       self.sess.run(tf.report_uninitialized_variables(list_of_variables)))
+            self.sess.run(tf.initialize_variables(uninitialized_variables))
+
+
     def close(self):
         if self.sess is not None:
             self.sess.close()
@@ -96,7 +190,6 @@ class Network(object):
             per_class_evaluation = False,
             validation_data = None, 
             test_data = None,
-            gpu_mem_fraction = None,
             shuffle_freq = None,
             l1_reg_strength = 0.0,
             l2_reg_strength = 0.0,
@@ -154,9 +247,6 @@ class Network(object):
 
         self.network_summary.add_variable_summary()
 
-        # setup train steps
-        if self.global_step is None:
-            self.global_step = tf.Variable(0, trainable = False, name = "net_global_step")
     
         try:
             opt_name = optimizer.__class__.__name__
@@ -199,18 +289,7 @@ class Network(object):
 
         if evaluation_fmt is None: evaluation_fmt = ".5f"
 
-        # initilize our session and our graph variables
-        if self.sess is None:
-            gpu_options = None
-            if gpu_mem_fraction is not None:
-                gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction = gpu_mem_fraction)
-            sess_config = tf.ConfigProto(gpu_options = gpu_options, 
-                                         log_device_placement = False,
-                                         allow_soft_placement = False)
-            
-            self.saver = tf.train.Saver()
-            self.sess = tf.Session(config = sess_config)
-            self.sess.run(tf.global_variables_initializer())
+        self.init_session()
         
         self.network_summary.add_graph(self.sess.graph)
         
