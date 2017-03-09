@@ -468,6 +468,13 @@ class Network(object):
             eval_results = self.sess.run(fetches, feed_dict = feed_dict)
             return self._process_eval_results(eval_results, non_summary_size)
     
+    def predict(self, data, chunk_size = 500):
+        with self.sess.as_default()
+            results = [] 
+            for chunk_x, chunk_y, in self._batch_for_eval(dataset, chunk_size):
+                results.extend(self.net_output.eval(feed_dict={self.net_input : chunk_x}))
+            return np.argmax(results, 1)
+
     # split these just for the sake of subclassing
     def _batch_for_train(self, dataset, batch_size, include_progress = False):
         return batch_dataset(dataset, batch_size, include_progress)
