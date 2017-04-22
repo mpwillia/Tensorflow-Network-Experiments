@@ -8,6 +8,8 @@ import numpy as np
 from random import shuffle
 import tensorflow as tf
 
+print("Using Tensorflow Version: {}".format(tf.__version__))
+
 def main():
 
     dataset = make_dataset()
@@ -27,8 +29,10 @@ def test_rnn(train_data, test_data):
     cell = tf.nn.rnn_cell.LSTMCell(num_hidden,state_is_tuple=True)
 
     val, state = tf.nn.dynamic_rnn(cell, data, dtype=tf.float32)
-
+    
+    # val = [batch_size, max_time, output_size]
     val = tf.transpose(val, [1, 0, 2])
+    # val = [max_time, batch_size, output_size]
     last = tf.gather(val, int(val.get_shape()[0]) - 1)
 
     weight = tf.Variable(tf.truncated_normal([num_hidden, int(target.get_shape()[1])]))
@@ -58,7 +62,7 @@ def test_rnn(train_data, test_data):
             inp, out = train_input[ptr:ptr+batch_size], train_output[ptr:ptr+batch_size]
             ptr+=batch_size
             sess.run(minimize,{data: inp, target: out})
-        print "Epoch - ",str(i)
+        print("Epoch {:5d} / {:5d}".format(i, epoch))
     incorrect = sess.run(error,{data: test_input, target: test_output})
     print('Epoch {:2d} error {:3.1f}%'.format(i + 1, 100 * incorrect))
 
@@ -73,7 +77,7 @@ def split_dataset(dataset, num_examples = 10000):
 
 
 def make_dataset():
- 
+    print("Creating Dataset") 
     train_input = ['{0:020b}'.format(i) for i in range(2**20)]
     shuffle(train_input)
     train_input = [map(int,i) for i in train_input]
