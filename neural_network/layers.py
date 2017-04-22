@@ -85,8 +85,38 @@ def max_pool2d(**kwargs):
     kwargs = _handle_kwargs(kwargs, max_pool2d.defaults)
     return _wrap_layer(tfcl.max_pool2d, **kwargs)
 
-# Generic Layer Function Wrappers ---------------------------------------------
 
+def lstm(num_units, **kwargs):
+    lstm.cell_defaults = {'use_peepholes': False,
+                          'initializer': tfcl.xavier_initializer()}
+    
+    scope = kwargs.pop('scope', None)
+    cell_kwargs = _handle_kwargs(kwargs, lstm.cell_defaults)
+
+    cell = tf.nn.rnn_cell.LSTMCell(num_units, **cell_kwargs)
+    rnn_kwargs = {'cell': cell,
+                  'scope': scope,
+                  'dtype': tf.float32}
+    
+    return _wrap_layer(tf.nn.dynamic_rnn, **rnn_kwargs)
+
+
+def _rnn_most_recent(inputs, scope = None):
+    with tf.name_scope(scope):
+        val = tf.transpose(inputs, [1,0,2])
+        return tf.gather(val, tf.shape(val)[0]-1)
+
+def rnn_most_recent(**kwargs):
+    return _wrap_layer(_rnn_most_recent, **kwargs)
+
+def _one_hot(inputs, depth, scope = None, **kwargs):
+    with tf.name_scope(scope):
+        return tf.one_hot(tf.to_int64(inputs), depth, **kwargs)
+
+def one_hot(**kwargs):
+    return _wrap_layer(_one_hot, **kwargs)
+
+# Generic Layer Function Wrappers ---------------------------------------------
 _layer_funcs = [tfcl.avg_pool2d,
                 tfcl.batch_norm,
                 tfcl.convolution2d,

@@ -7,15 +7,15 @@ import dill as pickle
 
 import os
 
-def save(net, name = None):
+def save(net, name = None, path = './'):
     if name is None:
         name = net.network_name
     
     vars_name = name + ".ckpt"
     net_name = name + ".pkl"
 
-    vars_path = os.path.join("./", vars_name)
-    net_path = os.path.join("./", net_name)
+    vars_path = os.path.join(path, vars_name)
+    net_path = os.path.join(path, net_name)
     
     print("Saving Network")
     net.save_variables(vars_path)
@@ -24,13 +24,13 @@ def save(net, name = None):
         pickle.dump(net, f)
 
 
-def load(name):
+def load(name, path = './'):
     vars_name = name + ".ckpt"
     net_name = name + ".pkl"
 
-    vars_path = os.path.join("./", vars_name)
-    net_path = os.path.join("./", net_name)
-    
+    vars_path = os.path.join(path, vars_name)
+    net_path = os.path.join(path, net_name)
+   
     print("Loading Network")
     with open(net_path, 'r') as f:
         net = pickle.load(f)

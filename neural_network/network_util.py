@@ -64,10 +64,10 @@ def get_num_batches(dataset_size, batch_size):
         return int(math.ceil(dataset_size / float(batch_size)))
 
 
-def batch_dataset(dataset, batch_size, include_progress = False):
+def batch_dataset(dataset, batch_size, include_progress = False, has_outputs = True):
     if batch_size is None: 
         yield dataset
-    else:
+    elif has_outputs:
         x, y = dataset 
         total_batches = get_num_batches(len(x), batch_size) 
         for batch_num in range(total_batches):
@@ -79,6 +79,17 @@ def batch_dataset(dataset, batch_size, include_progress = False):
                 yield batch_x, batch_y, batch_num, total_batches
             else:
                 yield batch_x, batch_y
+    else:
+        total_batches = get_num_batches(len(dataset), batch_size) 
+        for batch_num in range(total_batches):
+            batch_idx = batch_num * batch_size
+            batch = dataset[batch_idx : batch_idx + batch_size]
+
+            if include_progress:
+                yield batch, batch_num, total_batches
+            else:
+                yield batch
+
 
 
 # Per Class Filtering ---------------------------------------------------------

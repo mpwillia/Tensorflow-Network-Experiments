@@ -24,9 +24,9 @@ FitResults = namedtuple('FitResults', ['train', 'validation', 'test'])
 
 
 
-
 class Network(object):
-    def __init__(self, input_shape, layers, logdir = None, network_name = 'network'):
+    def __init__(self, input_shape, layers, pred_act_fn = None, 
+                 logdir = None, network_name = 'network'):
         """
         For |layers| see:
             https://www.tensorflow.org/api_docs/python/contrib.layers/higher_level_ops_for_building_neural_network_layers_
@@ -34,6 +34,7 @@ class Network(object):
         """
         self.input_shape = input_shape
         self.layers = layers
+        self.pred_act_fn = pred_act_fn
         
         self.network_name = network_name
         self.input_shape = input_shape
@@ -60,7 +61,10 @@ class Network(object):
         print("  {:35s} : {}".format("Input Shape", self.net_input.get_shape()))
 
         prev_layer_output = self.net_input
-        
+    
+        # layer states are only applicable for recurrent layers
+        self.layer_states = []
+
         made_kernel_images = False
 
         for layer_num, layer in enumerate(layers):
@@ -68,7 +72,19 @@ class Network(object):
             layer_name = "layer_{:d}_{}".format(layer_num, layer_type)
             
             with tf.name_scope(layer_name) as layer_scope:
-                prev_layer_output = layer(inputs = prev_layer_output, scope = layer_name)
+                layer_output = layer(inputs = prev_layer_output, scope = layer_name)
+                
+                try:
+                    if len(layer_output) == 2:
+                        prev_layer_output, state = layer_output
+                    else:
+                        prev_layer_output = layer_output[0]
+                        state = None
+                except:
+                    prev_layer_output = layer_output
+                    state = None
+                
+                self.layer_states.append(state)
                 self.network_summary.add_layer_summary(layer_name, prev_layer_output, layer_scope)
 
             layer_msg = "Layer {:d} ({}) Shape".format(layer_num, layer_type)
@@ -79,6 +95,12 @@ class Network(object):
             self.net_output = prev_layer_output
             self.network_summary.add_output_summary(self.net_output, scope = output_scope)
 
+            if self.pred_act_fn is not None:
+                self.pred_net_output = self.pred_act_fn(prev_layer_output)
+            else:
+                self.pred_net_output = prev_layer_output
+            self.network_summary.add_output_summary(self.pred_net_output, scope = output_scope)
+
         self.exp_output = tf.placeholder(tf.float32, self.net_output.get_shape(),
                                          name = "loss_expected_output")
         
@@ -88,7 +110,7 @@ class Network(object):
     def __getstate__(self):
         odict = self.__dict__.copy()
         
-        from pprint import pprint 
+        #from pprint import pprint 
 
         def unwrap_layer(wrapped_layer):
             print("Layer to Unwrap") 
@@ -96,8 +118,8 @@ class Network(object):
 
             return (wrapped_layer.func, wrapped_layer.args, wrapped_layer.kwargs)
 
-        print("Current Dict State")
-        pprint(odict)
+        #print("Current Dict State")
+        #pprint(odict)
         
         # Reset Session and Savor Object
         #odict['sess'] = None
@@ -113,35 +135,33 @@ class Network(object):
         del odict['eval_net_output']
         del odict['net_input']
         del odict['net_output']
+        del odict['pred_net_output']
         del odict['net_input_shape']
-
+        del odict['layer_states']
 
         #print("Test")
         #pprint(self.layers[0].__getstate__())
 
 
-        print("\n\nFinal Dict State")
+        #print("\n\nFinal Dict State")
         
         # Unwrap Layer Functions
         #unwrapped_layers = [unwrap_layer(layer) for layer in self.layers]
         #odict['layers'] = unwrapped_layers
         
         
-
-
-        pprint(odict)
+        #pprint(odict)
 
         return odict
 
     def __setstate__(self, state):
-        from pprint import pprint 
-        print("Restoring State From")
-        pprint(state)
+        #from pprint import pprint 
+        #print("Restoring State From")
+        #pprint(state)
 
         #unwrapped_layers = state['layers']
         #wrapped_layers = [partial(func, *args, **kwargs) for func, args, kwargs in unwrapped_layers]
         #state['layers'] = wrapped_layers
-
         self.__init__(**state)
 
 
@@ -205,12 +225,11 @@ class Network(object):
             https://www.tensorflow.org/api_docs/python/nn/classification
 
         """
-    
 
         # reshape given data
-        train_data = self._reshape_dataset(train_data)
-        validation_data = self._reshape_dataset(validation_data)
-        test_data = self._reshape_dataset(test_data)
+        #train_data = self._reshape_dataset(train_data)
+        #validation_data = self._reshape_dataset(validation_data)
+        #test_data = self._reshape_dataset(test_data)
 
         if summaries_per_epoch <= 0:
             summaries_per_epoch = None
@@ -241,6 +260,7 @@ class Network(object):
 
                 loss_tensor = grad_loss + reg_penalty
             else:
+                reg_penalty = None
                 loss_tensor = grad_loss 
             
             self.network_summary.add_loss_summary(loss_tensor, grad_loss, reg_penalty, loss_scope)
@@ -469,18 +489,47 @@ class Network(object):
             return self._process_eval_results(eval_results, non_summary_size)
     
     def predict(self, data, chunk_size = 500):
-        with self.sess.as_default()
+        with self.sess.as_default():
             results = [] 
-            for chunk_x, chunk_y, in self._batch_for_eval(dataset, chunk_size):
-                results.extend(self.net_output.eval(feed_dict={self.net_input : chunk_x}))
+            for chunk_x in batch_dataset(data, chunk_size, has_outputs = False):
+                results.extend(self.pred_net_output.eval(feed_dict={self.net_input : chunk_x}))
             return np.argmax(results, 1)
+
+    def sample(self, data, temperature = 1.0, chunk_size = 500):
+        with self.sess.as_default():
+            results = [] 
+            for chunk_x in batch_dataset(data, chunk_size, has_outputs = False):
+                results.extend(self.pred_net_output.eval(feed_dict={self.net_input : chunk_x}))
+            results = np.asarray(results)
+
+            if temperature <= 0.0:
+                return np.argmax(results, 1)
+            
+            num_choices = results.shape[1] # (batch, outputs)
+            #choices = np.arange(num_choices)
+            #def apply_temperature(results_1d):
+            #    non_zero = np.nonzero(results_1d) 
+            #    nz_results = results_1d[non_zero]
+            #    nz_choices = choices[non_zero]
+
+            #    probs = np.exp(np.log(nz_results) / temperature)
+            #    probs /= np.sum(probs)
+            #    
+            #    return np.random.choice(nz_choices, p = probs)
+            #
+            #return np.apply_along_axis(apply_temperature, 1, results)
+
+            probs = np.exp(np.log(results) / temperature)
+            probs /= np.sum(probs, 1)
+            f = lambda p: np.random.choice(num_choices, p=p)
+            return np.apply_along_axis(f, 1, probs)
 
     # split these just for the sake of subclassing
     def _batch_for_train(self, dataset, batch_size, include_progress = False):
-        return batch_dataset(dataset, batch_size, include_progress)
+        return batch_dataset(dataset, batch_size, include_progress, True)
     
     def _batch_for_eval(self, dataset, batch_size, include_progress = False):
-        return batch_dataset(dataset, batch_size, include_progress)
+        return batch_dataset(dataset, batch_size, include_progress, True)
     
     def _evaluate_by_class(self, all_pred, all_exp, eval_tensor, num_classes):
         results = []
