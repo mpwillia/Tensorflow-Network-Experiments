@@ -4,7 +4,6 @@
 #except:
 #    import pickle
 import dill as pickle
-
 import os
 
 def save(net, name = None, path = './'):
@@ -19,7 +18,7 @@ def save(net, name = None, path = './'):
     
     print("Saving Network")
     net.save_variables(vars_path)
-
+    
     with open(net_path, 'w') as f:
         pickle.dump(net, f)
 
@@ -30,9 +29,10 @@ def load(name, path = './'):
 
     vars_path = os.path.join(path, vars_name)
     net_path = os.path.join(path, net_name)
-   
-    print("Loading Network")
+    
+
     with open(net_path, 'r') as f:
+        print("Loading Network")
         net = pickle.load(f)
     
     net.load_variables(vars_path)

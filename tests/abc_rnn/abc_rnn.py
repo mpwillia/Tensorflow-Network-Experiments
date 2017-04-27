@@ -85,6 +85,7 @@ def create_and_train_network(train, test, seq_len, encoding, name):
     eval_freq = None
     eval_fmt = '8.3%'
     verbose = True
+    keep_prob = 1.0
 
     fit_results = net.fit(train, opt, loss_func, epochs, mb_size,
                           evaluation_freq = eval_freq, 
@@ -93,6 +94,7 @@ def create_and_train_network(train, test, seq_len, encoding, name):
                           shuffle_freq = 1,
                           test_data = test,
                           l2_reg_strength = 0.001,
+                          dropout_keep_prob = keep_prob,
                           verbose = verbose)
  
     print_fit_results(fit_results, eval_fmt, 'Final Results')

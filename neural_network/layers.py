@@ -109,12 +109,21 @@ def _rnn_most_recent(inputs, scope = None):
 def rnn_most_recent(**kwargs):
     return _wrap_layer(_rnn_most_recent, **kwargs)
 
+
 def _one_hot(inputs, depth, scope = None, **kwargs):
     with tf.name_scope(scope):
         return tf.one_hot(tf.to_int64(inputs), depth, **kwargs)
 
 def one_hot(**kwargs):
     return _wrap_layer(_one_hot, **kwargs)
+
+
+def _dropout(inputs, keep_prob, scope = None, **kwargs):
+    with tf.name_scope(scope):
+        return tf.nn.dropout(inputs, keep_prob, **kwargs)
+
+def dropout(**kwargs):
+    return _wrap_layer(_dropout, **kwargs)
 
 # Generic Layer Function Wrappers ---------------------------------------------
 _layer_funcs = [tfcl.avg_pool2d,

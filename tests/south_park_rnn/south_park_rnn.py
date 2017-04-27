@@ -26,8 +26,9 @@ def run_test():
 
     name = 'south_park_lstm_rnn'
     sample_length = 100
+    dataset_size = None 
 
-    dataset, encoding = load_and_prepare_dataset(100, sample_length, verbose = True)
+    dataset, encoding = load_and_prepare_dataset(dataset_size, sample_length, verbose = True)
 
     print(encoding)
     dataset_util.print_dataset_shape(dataset)
@@ -116,8 +117,11 @@ def create_and_train_net(train, test, encoding, sample_length, name):
     net = Network([sample_length],
                   [layers.one_hot(depth=len(encoding)),
                    layers.lstm(num_units=256),
+                   layers.dropout(),
                    layers.lstm(num_units=256),
+                   layers.dropout(),
                    layers.lstm(num_units=256),
+                   layers.dropout(),
                    layers.rnn_most_recent(),
                    layers.fully_connected(num_outputs=len(encoding), activation_fn = None)],
                   pred_act_fn = tf.nn.softmax, 
@@ -125,7 +129,7 @@ def create_and_train_net(train, test, encoding, sample_length, name):
                   network_name = name)
 
     # Setup our training parameters
-    opt = tf.train.AdamOptimizer()
+    opt = tf.train.AdamOptimizer(0.006)
     
     loss_func = softmax_cross_entropy_with_logits
     eval_func = accuracy
@@ -135,6 +139,7 @@ def create_and_train_net(train, test, encoding, sample_length, name):
     eval_freq = 1
     eval_fmt = '8.3%'
     verbose = True
+    keep_prob = 0.5
 
     fit_results = net.fit(train, opt, loss_func, epochs, mb_size,
                           evaluation_freq = eval_freq, 
@@ -143,6 +148,7 @@ def create_and_train_net(train, test, encoding, sample_length, name):
                           shuffle_freq = 1,
                           test_data = test,
                           l2_reg_strength = 0.0001,
+                          dropout_keep_prob = keep_prob,
                           verbose = verbose)
  
     print_fit_results(fit_results, eval_fmt, 'Final Results')
